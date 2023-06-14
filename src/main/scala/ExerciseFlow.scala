@@ -9,17 +9,18 @@ import org.apache.spark.sql.types.IntegerType
 
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import scala.util.Properties
 
 object ExerciseFlow {
   def main(args: Array[String]): Unit = {
-    val inputPath = "C:/Users/Oliver/IdeaProjects/tendo-candidate-exercise-p1/src/main/resources/Exercise Data.xlsx"
+    val inputPath = Properties.envOrElse("INPUT_PATH", "./src/main/resources/Exercise Data.xlsx")
     val tempPath = "./temp"
-    val outputPath = "./data"
+    val outputPath = Properties.envOrElse("OUTPUT_PATH", "./data")
 
     val currentDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"))
 
     val spark = SparkSession.builder
-      .appName("Simple Application")
+      .appName("Tendo Exercise")
       .config("spark.master", "local")
       .getOrCreate()
 
