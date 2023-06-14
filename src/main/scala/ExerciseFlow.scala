@@ -34,7 +34,7 @@ object ExerciseFlow {
       inferSchema = false,
       usePlainNumberFormat = true
     ).load(inputPath)
-      .select($"patientid" as "patientId", $"Sex" as "sex", $"Age".cast(IntegerType) as "age", $"primary_care_provider" as "primaryCareProvider")
+      .select($"patientid" as "patient_id", $"Sex" as "sex", $"Age".cast(IntegerType) as "age", $"primary_care_provider")
       .as[Patient]
 
     // Partition on medication generic name to calculate average minimum dose
@@ -46,9 +46,9 @@ object ExerciseFlow {
       inferSchema = false,
       usePlainNumberFormat = true
     ).load(inputPath)
-      .withColumn("minimumDose", $"minimum_dose".cast(IntegerType))
-      .withColumn("avgMinimumDose", avg("minimumDose").over(medicationWindowSpec))
-      .select($"encounterid" as "encounterId" ,$"medication_simple_generic_name" as "medicationSimpleGenericName", $"minimumDose", $"dose_unit" as "doseUnit", $"avgMinimumDose")
+      .withColumn("minimum_dose", $"minimum_dose".cast(IntegerType))
+      .withColumn("avg_minimum_dose", avg("minimum_dose").over(medicationWindowSpec))
+      .select($"encounterid" as "encounter_id" ,$"medication_simple_generic_name", $"minimum_dose", $"dose_unit", $"avg_minimum_dose")
       .as[Medication]
 
     val encountersDs = spark.read.excel(
@@ -58,7 +58,7 @@ object ExerciseFlow {
       inferSchema = false,
       usePlainNumberFormat = true
     ).load(inputPath)
-      .select($"patientid" as "patientId", $"encounterid" as "encounterId", $"admit_diagnosis" as "admitDiagnosis")
+      .select($"patientid" as "patient_id", $"encounterid" as "encounter_id", $"admit_diagnosis")
       .as[Encounter]
 
     // Debugging statements
@@ -69,9 +69,9 @@ object ExerciseFlow {
     encountersDs.printSchema()
     encountersDs.show()
 
-    val resultDs = patientDs.join(encountersDs, usingColumn = "patientId")
-      .join(medicationsDs, usingColumn = "encounterId")
-      //.as[OutputSchema] TODO rename columns so this works
+    val resultDs = patientDs.join(encountersDs, usingColumn = "patient_id")
+      .join(medicationsDs, usingColumn = "encounter_id")
+      .as[OutputSchema]
 
     resultDs.show(false)
 
@@ -84,9 +84,6 @@ object ExerciseFlow {
       .save(tempPath)
 
     // Use Hadoop FS to move and rename file to expected format
-    val hadoopConfig = new Configuration()
-    val hdfs = FileSystem.get(hadoopConfig)
-
     val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
     val fileName = fs.globStatus(new Path(tempPath + "/part*"))(0).getPath.getName
     fs.rename(new Path(tempPath + "/" + fileName), new Path(outputPath + s"/target_1_$currentDate.txt"))
@@ -95,8 +92,8 @@ object ExerciseFlow {
     fs.delete(new Path(tempPath), true)
 
     // Metrics on missing data
-    val nullMedicationCount = resultDs.where($"medicationSimpleGenericName".isNull).count()
-    val blankMedicationCount = resultDs.where($"medicationSimpleGenericName" === "").count()
+    val nullMedicationCount = resultDs.where($"medication_simple_generic_name".isNull).count()
+    val blankMedicationCount = resultDs.where($"medication_simple_generic_name" === "").count()
     val totalCount = resultDs.count()
     println(s"Number of null medication generic name records: $nullMedicationCount")
     println(s"Number of blank medication records: $blankMedicationCount")
