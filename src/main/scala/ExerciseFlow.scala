@@ -1,11 +1,10 @@
 import ExerciseSchemas.{Encounter, Medication, OutputSchema, Patient}
-import org.apache.spark.sql.{Dataset, Encoders, SaveMode, SparkSession}
 import com.crealytics.spark.excel._
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.avg
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.{Dataset, SaveMode, SparkSession}
 
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -27,7 +26,7 @@ object ExerciseFlow {
     import spark.implicits._
 
     // Load the dataframes in from their source spreadsheet tabs
-    // Note, data in its source form is basically schemaless, so these casts could fail
+    // NOTE: data in its source form is basically schemaless, so these casts could fail
     val patientDs: Dataset[Patient] = spark.read.excel(
       header = true,
       dataAddress = "'patient_e1'!A1",
