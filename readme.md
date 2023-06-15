@@ -4,7 +4,7 @@ Can be ran directly from IntelliJ using the provided run configuration or follow
 
 First build the uber jar
 
-`sbt package`
+`sbt assembly`
 
 This can be found in `target/scala-2.12/tendo_flow.jar` and can be submitted to a cluster using spark-submit as follows
 

@@ -76,8 +76,11 @@ object ExerciseFlow {
 
       resultDs.show(false)
 
+      val nullResults = resultDs.where($"medication_simple_generic_name".isNull)
+      val finalDs = resultDs.except(nullResults).dropDuplicates()
+
       // Save as single csv part file
-      resultDs.coalesce(1).write.format("csv")
+      finalDs.coalesce(1).write.format("csv")
         .option("header", true)
         .option("delimiter", "|")
         .option("lineSep", "\n")
@@ -93,7 +96,7 @@ object ExerciseFlow {
       fs.delete(new Path(tempPath), true)
 
       // Metrics on missing data
-      val nullMedicationCount = resultDs.where($"medication_simple_generic_name".isNull).count()
+      val nullMedicationCount = nullResults.count()
       val blankMedicationCount = resultDs.where($"medication_simple_generic_name" === "").count()
       val totalCount = resultDs.count()
       println(s"Number of null medication generic name records: $nullMedicationCount")
