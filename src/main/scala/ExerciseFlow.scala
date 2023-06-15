@@ -25,79 +25,84 @@ object ExerciseFlow {
 
     import spark.implicits._
 
-    // Load the dataframes in from their source spreadsheet tabs
-    // NOTE: data in its source form is basically schemaless, so these casts could fail
-    val patientDs: Dataset[Patient] = spark.read.excel(
-      header = true,
-      dataAddress = "'patient_e1'!A1",
-      treatEmptyValuesAsNulls = true,
-      inferSchema = false,
-      usePlainNumberFormat = true
-    ).load(inputPath)
-      .select($"patientid" as "patient_id", $"Sex" as "sex", $"Age".cast(IntegerType) as "age", $"primary_care_provider")
-      .as[Patient]
+    try {
+      // Load the dataframes in from their source spreadsheet tabs
+      // NOTE: data in its source form is basically schemaless, so these casts could fail
+      val patientDs: Dataset[Patient] = spark.read.excel(
+        header = true,
+        dataAddress = "'patient_e1'!A1",
+        treatEmptyValuesAsNulls = true,
+        inferSchema = false,
+        usePlainNumberFormat = true
+      ).load(inputPath)
+        .select($"patientid" as "patient_id", $"Sex" as "sex", $"Age".cast(IntegerType) as "age", $"primary_care_provider")
+        .as[Patient]
 
-    // Partition on medication generic name to calculate average minimum dose
-    val medicationWindowSpec = Window.partitionBy("medication_simple_generic_name")
-    val medicationsDs = spark.read.excel(
-      header = true,
-      dataAddress = "'medications_e1'!A1",
-      treatEmptyValuesAsNulls = true,
-      inferSchema = false,
-      usePlainNumberFormat = true
-    ).load(inputPath)
-      .withColumn("minimum_dose", $"minimum_dose".cast(IntegerType))
-      .withColumn("avg_minimum_dose", avg("minimum_dose").over(medicationWindowSpec))
-      .select($"encounterid" as "encounter_id" ,$"medication_simple_generic_name", $"minimum_dose", $"dose_unit", $"avg_minimum_dose")
-      .as[Medication]
+      // Partition on medication generic name to calculate average minimum dose
+      val medicationWindowSpec = Window.partitionBy("medication_simple_generic_name")
+      val medicationsDs = spark.read.excel(
+        header = true,
+        dataAddress = "'medications_e1'!A1",
+        treatEmptyValuesAsNulls = true,
+        inferSchema = false,
+        usePlainNumberFormat = true
+      ).load(inputPath)
+        .withColumn("minimum_dose", $"minimum_dose".cast(IntegerType))
+        .withColumn("avg_minimum_dose", avg("minimum_dose").over(medicationWindowSpec))
+        .select($"encounterid" as "encounter_id", $"medication_simple_generic_name", $"minimum_dose", $"dose_unit", $"avg_minimum_dose")
+        .as[Medication]
 
-    val encountersDs = spark.read.excel(
-      header = true,
-      dataAddress = "'encounter_e1'!A1",
-      treatEmptyValuesAsNulls = true,
-      inferSchema = false,
-      usePlainNumberFormat = true
-    ).load(inputPath)
-      .select($"patientid" as "patient_id", $"encounterid" as "encounter_id", $"admit_diagnosis")
-      .as[Encounter]
+      val encountersDs = spark.read.excel(
+        header = true,
+        dataAddress = "'encounter_e1'!A1",
+        treatEmptyValuesAsNulls = true,
+        inferSchema = false,
+        usePlainNumberFormat = true
+      ).load(inputPath)
+        .select($"patientid" as "patient_id", $"encounterid" as "encounter_id", $"admit_diagnosis")
+        .as[Encounter]
 
-    // Debugging statements
-    patientDs.show(false)
-    patientDs.printSchema()
-    medicationsDs.show()
-    medicationsDs.printSchema()
-    encountersDs.printSchema()
-    encountersDs.show()
+      // Debugging statements
+      patientDs.show(false)
+      patientDs.printSchema()
+      medicationsDs.show()
+      medicationsDs.printSchema()
+      encountersDs.printSchema()
+      encountersDs.show()
 
-    val resultDs = patientDs.join(encountersDs, usingColumn = "patient_id")
-      .join(medicationsDs, usingColumn = "encounter_id")
-      .as[OutputSchema]
+      val resultDs = patientDs.join(encountersDs, usingColumn = "patient_id")
+        .join(medicationsDs, usingColumn = "encounter_id")
+        .as[OutputSchema]
 
-    resultDs.show(false)
+      resultDs.show(false)
 
-    // Save as single csv part file
-    resultDs.coalesce(1).write.format("csv")
-      .option("header", true)
-      .option("delimiter", "|")
-      .option("lineSep", "\n")
-      .mode(SaveMode.Overwrite)
-      .save(tempPath)
+      // Save as single csv part file
+      resultDs.coalesce(1).write.format("csv")
+        .option("header", true)
+        .option("delimiter", "|")
+        .option("lineSep", "\n")
+        .mode(SaveMode.Overwrite)
+        .save(tempPath)
 
-    // Use Hadoop FS to move and rename file to expected format
-    val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
-    val fileName = fs.globStatus(new Path(tempPath + "/part*"))(0).getPath.getName
-    fs.rename(new Path(tempPath + "/" + fileName), new Path(outputPath + s"/target_1_$currentDate.txt"))
+      // Use Hadoop FS to move and rename file to expected format
+      val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+      val fileName = fs.globStatus(new Path(tempPath + "/part*"))(0).getPath.getName
+      fs.rename(new Path(tempPath + "/" + fileName), new Path(outputPath + s"/target_1_$currentDate.txt"))
 
-    // Remove the temp folder
-    fs.delete(new Path(tempPath), true)
+      // Remove the temp folder
+      fs.delete(new Path(tempPath), true)
 
-    // Metrics on missing data
-    val nullMedicationCount = resultDs.where($"medication_simple_generic_name".isNull).count()
-    val blankMedicationCount = resultDs.where($"medication_simple_generic_name" === "").count()
-    val totalCount = resultDs.count()
-    println(s"Number of null medication generic name records: $nullMedicationCount")
-    println(s"Number of blank medication records: $blankMedicationCount")
-    println(s"Number of total records: $totalCount")
-
+      // Metrics on missing data
+      val nullMedicationCount = resultDs.where($"medication_simple_generic_name".isNull).count()
+      val blankMedicationCount = resultDs.where($"medication_simple_generic_name" === "").count()
+      val totalCount = resultDs.count()
+      println(s"Number of null medication generic name records: $nullMedicationCount")
+      println(s"Number of blank medication records: $blankMedicationCount")
+      println(s"Number of total records: $totalCount")
+    }
+    catch {
+      case e: Exception => e.printStackTrace()
+        // Could throw an unhealthy heartbeat here, trigger Cloudwatch warning, etc
+    }
   }
 }
