@@ -6,6 +6,12 @@ val sparkVersion = "3.2.2"
 lazy val root = (project in file("."))
   .settings(
     name := "tendo-candidate-exercise-p1",
+    assembly / mainClass := Some("ExerciseFlow"),
+    assembly / assemblyJarName := "tendo_flow.jar",
+    assembly / assemblyMergeStrategy := {
+      case PathList("META-INF", xs@_*) => MergeStrategy.discard
+      case x => MergeStrategy.first
+    }
   )
 
 libraryDependencies ++= Seq(
